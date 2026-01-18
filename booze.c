@@ -9,7 +9,8 @@
 #include <errno.h>
 #include <dlfcn.h>
 
-#define FUSE_USE_VERSION 26
+//#define FUSE_USE_VERSION 26
+#define FUSE_USE_VERSION 30
 
 #include <fuse.h>
 
@@ -17,6 +18,7 @@
 #include <shell.h>
 #include <bashgetopt.h>
 #include <common.h>
+#include <execute_cmd.h>
 #include <error.h>
 
 #define __wdname(name, num) __##name##_word_desc##num
@@ -239,7 +241,7 @@ static struct {
 #include "ops.def"
 } handlers;
 
-static int booze_getattr(const char* path, struct stat* st)
+static int booze_getattr(const char* path, struct stat* st, struct fuse_file_info *fi)
 {
 	const char* output;
 	int status, scanned;
@@ -279,7 +281,7 @@ static int booze_readlink(const char* path, char* buf, size_t size)
 }
 
 static int booze_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
-                         off_t offset, struct fuse_file_info *fi)
+                         off_t offset, struct fuse_file_info *fi, enum fuse_readdir_flags flags)
 {
 	const char* output;
 	int status;
@@ -306,7 +308,7 @@ static int booze_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		memcpy(tmp, de_start, de_end - de_start);
 		tmp[de_end - de_start] = '\0';
 
-		filler(buf, tmp, NULL, 0);
+		filler(buf, tmp, NULL, 0, FUSE_FILL_DIR_DEFAULTS);
 
 		if (!*de_end)
 			break;
@@ -320,13 +322,13 @@ BASIC2(mkdir, const char*, path, "%s", mode_t, mode, "%d");
 BASIC1(unlink, const char*, path, "%s");
 BASIC1(rmdir, const char*, path, "%s");
 BASIC2(symlink, const char*, from, "%s", const char*, to, "%s");
-BASIC2(rename, const char*, from, "%s", const char*, to, "%s");
+BASIC3(rename, const char*, from, "%s", const char*, to, "%s", unsigned int, flags, "%x");
 BASIC2(link, const char*, from, "%s", const char*, to, "%s");
-BASIC2(chmod, const char*, path, "%s", mode_t, mode, "%d");
-BASIC3(chown, const char*, path, "%s", uid_t, uid, "%d", gid_t, gid, "%d");
-BASIC2(truncate, const char*, path, "%s", off_t, size, "%jd");
+BASIC2_IL(chmod, const char*, path, "%s", mode_t, mode, "%d", struct fuse_file_info *, fi);
+BASIC3_IL(chown, const char*, path, "%s", uid_t, uid, "%d", gid_t, gid, "%d", struct fuse_file_info *, fi);
+BASIC2_IL(truncate, const char*, path, "%s", off_t, size, "%jd", struct fuse_file_info *, fi);
 
-static int booze_utimens(const char* path, const struct timespec ts[2])
+static int booze_utimens(const char* path, const struct timespec ts[2], struct fuse_file_info * fi)
 {
 	char* t0 = xasprintf("%d.%09d", ts[0].tv_sec, ts[0].tv_nsec);
 	char* t1 = xasprintf("%d.%09d", ts[1].tv_sec, ts[1].tv_nsec);
